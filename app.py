@@ -102,7 +102,7 @@ st.markdown("""
 # Logo Chmura+
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
-    st.image("assets/logo_chmura.png", use_container_width=True)
+    st.image("assets/logo_chmura.png", use_column_width=True)
 
 st.markdown("""
 <div class="info-box">
