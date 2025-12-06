@@ -1,8 +1,10 @@
-# CPK - Klasyfikator Chmur Punktów v2.0
+# Chmura+ v2.0
 
 **HackNation 2025 - Centralny Port Komunikacyjny**
 
 Automatyczna klasyfikacja elementów infrastruktury na podstawie chmur punktów LAS/LAZ z wykorzystaniem geometrycznych cech PCA i metodologii BIM.
+
+![Chmura+ Logo](assets/logo_chmura.png)
 
 ![Python](https://img.shields.io/badge/python-3.9+-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)

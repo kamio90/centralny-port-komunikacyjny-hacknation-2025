@@ -41,8 +41,8 @@ def find_las_files(directory: str = "data") -> list:
 
 # Konfiguracja strony
 st.set_page_config(
-    page_title="CPK - Klasyfikator Chmur Punktów",
-    page_icon="🏗️",
+    page_title="Chmura+ | Klasyfikator Chmur Punktów",
+    page_icon="assets/favicon-chmura.png",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -56,22 +56,22 @@ st.markdown("""
     .main-header {
         font-size: 2.5rem;
         font-weight: 700;
-        color: #1f77b4;
+        color: #0A1E42;
         text-align: center;
         margin-bottom: 2rem;
     }
     .sub-header {
         font-size: 1.5rem;
         font-weight: 600;
-        color: #2c3e50;
+        color: #0A1E42;
         margin-top: 1.5rem;
         margin-bottom: 1rem;
     }
     .info-box {
-        background-color: #e8f4f8;
+        background-color: #e6f0ff;
         padding: 1rem;
         border-radius: 0.5rem;
-        border-left: 4px solid #1f77b4;
+        border-left: 4px solid #0A1E42;
         margin: 1rem 0;
     }
     .success-box {
@@ -88,6 +88,10 @@ st.markdown("""
         border-left: 4px solid #ffc107;
         margin: 1rem 0;
     }
+    .logo-container {
+        text-align: center;
+        margin-bottom: 1rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -95,7 +99,11 @@ st.markdown("""
 # NAGŁÓWEK
 # ============================================================================
 
-st.markdown('<div class="main-header">🏗️ CPK - Klasyfikator Chmur Punktów</div>', unsafe_allow_html=True)
+# Logo Chmura+
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    st.image("assets/logo_chmura.png", use_container_width=True)
+
 st.markdown("""
 <div class="info-box">
     <b>Automatyczna klasyfikacja elementów infrastruktury</b><br>
@@ -515,8 +523,8 @@ with tab2:
 
 st.markdown("---")
 st.markdown("""
-<div style="text-align: center; color: #7f8c8d; font-size: 0.9rem;">
-    <b>CPK - Klasyfikator Chmur Punktów v2.0</b><br>
+<div style="text-align: center; color: #0A1E42; font-size: 0.9rem;">
+    <b>Chmura+ v2.0</b><br>
     Centralny Port Komunikacyjny | HackNation2025<br>
     Automatyczna klasyfikacja 45 klas infrastruktury
 </div>

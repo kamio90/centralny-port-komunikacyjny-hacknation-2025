@@ -1,8 +1,8 @@
 [theme]
-primaryColor = "#1f77b4"
+primaryColor = "#0A1E42"  # Chmura+ navy blue
 backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#f0f2f6"
-textColor = "#262730"
+secondaryBackgroundColor = "#f5f7fa"
+textColor = "#0A1E42"
 font = "sans serif"
 
 [server]
