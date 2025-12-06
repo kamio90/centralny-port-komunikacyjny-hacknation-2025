@@ -1,0 +1,20 @@
+# Core dependencies
+numpy==1.24.3
+torch==2.3.0                    # MPS support for Apple Silicon
+laspy[lazrs]==2.5.4             # LAS/LAZ file handling
+open3d==0.18.0                  # Point cloud processing
+
+# Web UI
+streamlit==1.31.0               # Web application framework
+plotly==5.18.0                  # Interactive 3D visualization
+
+# ML & Processing
+scikit-learn==1.3.2             # DBSCAN and other algorithms
+scipy==1.11.4                   # Scientific computing
+tqdm==4.66.1                    # Progress bars
+
+# Utilities
+pyyaml==6.0.1                   # Configuration files
+pandas==2.1.4                   # Data manipulation
+psutil==5.9.6                   # System monitoring
+tabulate==0.9.0                 # Table formatting for reports

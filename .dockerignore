@@ -1,0 +1,66 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Jupyter
+*.ipynb
+.ipynb_checkpoints
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Data files (będą montowane jako wolumeny)
+data/*.las
+data/*.laz
+output/*.las
+output/*.laz
+output/*.txt
+output/*.json
+
+# Testy
+tests/
+test_*.py
+*_test.py
+
+# Dokumentacja
+docs/
+*.md
+!README.md
+
+# Pliki tymczasowe
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Legacy code (jeśli został)
+app_old.py
+src/models/
+src/postprocessing/
+src/pipeline.py
+src/visualization/
+
+# Hackatonu pliki
+hackaton_task_files/
+COMPLETE_MASTER_CLASSIFIER.md
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml

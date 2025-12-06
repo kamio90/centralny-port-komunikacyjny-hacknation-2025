@@ -54,8 +54,11 @@ Thumbs.db
 # Output files
 output/
 results/
+test_output/
+data/output/
 classified_*.las
 classified_*.laz
+*.backup
 
 # Docker
 *.log
