@@ -1,0 +1,6 @@
+# Directory for saved ML models
+# Used by:
+# - RandomForestPointClassifier
+# - PointNetTrainer
+# - EnsembleClassifier
+# - ActiveLearningManager

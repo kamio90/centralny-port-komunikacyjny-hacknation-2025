@@ -89,6 +89,7 @@ class ProfessionalPipeline:
     CLASS_BUILDING = 6
     CLASS_NOISE = 7
     CLASS_WATER = 9
+    CLASS_BRIDGE = 17        # Most
     CLASS_RAIL = 18
     CLASS_POWERLINE = 19
     CLASS_POLE = 20
@@ -444,6 +445,8 @@ class ProfessionalPipeline:
         self.classification[results['signs'] & unclassified] = self.CLASS_SIGN
         self.classification[results['barriers'] & unclassified] = self.CLASS_BARRIER
         self.classification[results['platforms'] & unclassified] = self.CLASS_PLATFORM
+        self.classification[results['water'] & unclassified] = self.CLASS_WATER
+        self.classification[results['bridges'] & unclassified] = self.CLASS_BRIDGE
 
         elapsed = time.time() - start
         self.stats['steps']['infrastructure'] = {
@@ -455,6 +458,8 @@ class ProfessionalPipeline:
             'signs': int(results['signs'].sum()),
             'barriers': int(results['barriers'].sum()),
             'platforms': int(results['platforms'].sum()),
+            'water': int(results['water'].sum()),
+            'bridges': int(results['bridges'].sum()),
             'time': elapsed
         }
 

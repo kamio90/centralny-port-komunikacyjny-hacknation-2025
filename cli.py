@@ -37,7 +37,7 @@ import numpy as np
 import laspy
 
 from src.v2.core import LASLoader
-from src.v2.pipeline import ProfessionalPipeline, PipelineConfig
+from src.v2.pipeline import ProfessionalPipeline, PipelineConfig, BatchClassifier, BatchConfig
 
 
 def parse_args():
@@ -97,6 +97,18 @@ Przykłady:
         default=None,
         help="Ścieżka do pliku IFC (opcjonalne, format BIM)"
     )
+    parser.add_argument(
+        "--geojson",
+        type=str,
+        default=None,
+        help="Ścieżka do pliku GeoJSON (opcjonalne, dla integracji GIS)"
+    )
+    parser.add_argument(
+        "--html",
+        type=str,
+        default=None,
+        help="Ścieżka do pliku HTML (opcjonalne, interaktywny viewer 3D)"
+    )
 
     # Pipeline options
     parser.add_argument(
@@ -118,6 +130,19 @@ Przykłady:
         "--no-infrastructure",
         action="store_true",
         help="Pomiń detekcję infrastruktury"
+    )
+
+    # Batch mode
+    parser.add_argument(
+        "--batch", "-b",
+        action="store_true",
+        help="Tryb batch dla dużych plików (>50M punktów) - mniejsze zużycie pamięci"
+    )
+    parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=10_000_000,
+        help="Rozmiar chunka dla trybu batch (domyślnie 10M punktów)"
     )
 
     # Verbosity
@@ -200,89 +225,137 @@ def main():
     start_time = time.time()
 
     try:
-        # Step 1: Load data
-        if not args.quiet:
-            print("📂 Wczytywanie danych...")
+        # Check file size for auto-batch mode
+        file_info = LASLoader.get_file_info(str(input_path))
+        n_points = file_info['n_points']
 
-        loader = LASLoader(str(input_path))
-        data = loader.load()
+        # Auto-enable batch mode for large files
+        use_batch = args.batch or n_points > 50_000_000
 
-        n_points = len(data['coords'])
-        if not args.quiet:
-            print(f"   ✅ Wczytano {n_points:,} punktów")
+        if use_batch:
+            if not args.quiet:
+                print(f"📂 Tryb BATCH: {n_points:,} punktów")
+                print(f"   Chunk size: {args.chunk_size:,}")
 
-        # Step 2: Configure pipeline
-        config = PipelineConfig(
-            detect_noise=not args.no_noise,
-            detect_buildings=not args.no_buildings,
-            detect_infrastructure=not args.no_infrastructure
-        )
+            # Configure pipeline
+            config = PipelineConfig(
+                detect_noise=not args.no_noise,
+                detect_buildings=not args.no_buildings,
+                detect_infrastructure=not args.no_infrastructure,
+                use_fast_noise_detection=True
+            )
 
-        if args.fast:
-            # Fast mode adjustments
-            config.noise_voxel_size = 1.0
-            config.noise_k_neighbors = 15
-            config.hag_grid_resolution = 2.0
+            if args.fast:
+                config.noise_voxel_size = 1.0
+                config.noise_k_neighbors = 15
+                config.hag_grid_resolution = 2.0
 
-        # Step 3: Run classification
-        if not args.quiet:
-            print("\n🔄 Klasyfikacja...")
+            batch_config = BatchConfig(chunk_size=args.chunk_size)
 
-        pipeline = ProfessionalPipeline(
-            coords=data['coords'],
-            colors=data['colors'],
-            intensity=data['intensity'],
-            config=config
-        )
+            def batch_progress_cb(chunk_idx, n_chunks, pct, msg):
+                if not args.quiet:
+                    bar_width = 30
+                    filled = int(bar_width * pct / 100)
+                    bar = "█" * filled + "░" * (bar_width - filled)
+                    print(f"\r[{bar}] {pct:5.1f}% | Chunk {chunk_idx+1}/{n_chunks}: {msg}", end="", flush=True)
 
-        def progress_callback(step, pct, msg):
-            print_progress(step, pct, msg, args.quiet)
+            classifier = BatchClassifier(
+                str(input_path),
+                str(output_path),
+                pipeline_config=config,
+                batch_config=batch_config
+            )
 
-        classification, stats = pipeline.run(
-            progress_callback=progress_callback if not args.quiet else None
-        )
+            stats = classifier.run(progress_callback=batch_progress_cb if not args.quiet else None)
+            classification = None  # Już zapisane przez BatchClassifier
 
-        # Step 4: Save output
-        if not args.quiet:
-            print("\n💾 Zapisywanie wyników...")
+            if not args.quiet:
+                print()  # New line after progress bar
 
-        # Open original and save with classification
-        with laspy.open(str(input_path)) as src:
-            las_orig = src.read()
+        else:
+            # Standard mode
+            if not args.quiet:
+                print("📂 Wczytywanie danych...")
 
-            # Check if we need LAS 1.4 for extended classification
-            max_class = int(classification.max())
+            loader = LASLoader(str(input_path))
+            data = loader.load()
 
-            if max_class > 31:
-                # LAS 1.4 with extended classification
-                has_rgb = hasattr(las_orig, 'red') and las_orig.red is not None
-                point_format = 7 if has_rgb else 6
+            n_points = len(data['coords'])
+            if not args.quiet:
+                print(f"   ✅ Wczytano {n_points:,} punktów")
 
-                header = laspy.LasHeader(point_format=point_format, version="1.4")
-                header.scales = las_orig.header.scales
-                header.offsets = las_orig.header.offsets
+            # Configure pipeline
+            config = PipelineConfig(
+                detect_noise=not args.no_noise,
+                detect_buildings=not args.no_buildings,
+                detect_infrastructure=not args.no_infrastructure
+            )
 
-                las = laspy.LasData(header)
-                las.x = las_orig.x
-                las.y = las_orig.y
-                las.z = las_orig.z
-                las.intensity = las_orig.intensity
+            if args.fast:
+                config.noise_voxel_size = 1.0
+                config.noise_k_neighbors = 15
+                config.hag_grid_resolution = 2.0
 
-                if has_rgb:
-                    las.red = las_orig.red
-                    las.green = las_orig.green
-                    las.blue = las_orig.blue
+            # Run classification
+            if not args.quiet:
+                print("\n🔄 Klasyfikacja...")
 
-                las.classification = classification.astype(np.uint8)
-            else:
-                las = las_orig
-                las.classification = classification.astype(np.uint8)
+            pipeline = ProfessionalPipeline(
+                coords=data['coords'],
+                colors=data['colors'],
+                intensity=data['intensity'],
+                config=config
+            )
 
-            # Write output
-            if str(output_path).endswith('.laz'):
-                las.write(str(output_path), laz_backend=laspy.compression.LazBackend.Laszip)
-            else:
-                las.write(str(output_path))
+            def progress_callback(step, pct, msg):
+                print_progress(step, pct, msg, args.quiet)
+
+            classification, stats = pipeline.run(
+                progress_callback=progress_callback if not args.quiet else None
+            )
+
+            # Save output
+            if not args.quiet:
+                print("\n💾 Zapisywanie wyników...")
+
+        # Save output (skip if batch mode - already saved)
+        if not use_batch:
+            with laspy.open(str(input_path)) as src:
+                las_orig = src.read()
+
+                # Check if we need LAS 1.4 for extended classification
+                max_class = int(classification.max())
+
+                if max_class > 31:
+                    # LAS 1.4 with extended classification
+                    has_rgb = hasattr(las_orig, 'red') and las_orig.red is not None
+                    point_format = 7 if has_rgb else 6
+
+                    header = laspy.LasHeader(point_format=point_format, version="1.4")
+                    header.scales = las_orig.header.scales
+                    header.offsets = las_orig.header.offsets
+
+                    las = laspy.LasData(header)
+                    las.x = las_orig.x
+                    las.y = las_orig.y
+                    las.z = las_orig.z
+                    las.intensity = las_orig.intensity
+
+                    if has_rgb:
+                        las.red = las_orig.red
+                        las.green = las_orig.green
+                        las.blue = las_orig.blue
+
+                    las.classification = classification.astype(np.uint8)
+                else:
+                    las = las_orig
+                    las.classification = classification.astype(np.uint8)
+
+                # Write output
+                if str(output_path).endswith('.laz'):
+                    las.write(str(output_path), laz_backend=laspy.compression.LazBackend.Laszip)
+                else:
+                    las.write(str(output_path))
 
         if not args.quiet:
             file_size_mb = output_path.stat().st_size / (1024 * 1024)
@@ -293,20 +366,32 @@ def main():
             report_path = Path(args.report)
             report_path.parent.mkdir(parents=True, exist_ok=True)
 
+            # Calculate classified points from stats
+            class_stats = stats.get('classification', {})
+            classified_pts = sum(
+                info['count'] for cls_id, info in class_stats.items()
+                if cls_id != 1
+            )
+            unclassified_pts = class_stats.get(1, {}).get('count', 0)
+
             report_data = {
                 "metadata": {
+                    "tool": "CPK Chmura+ Classifier v2.0",
                     "input_file": str(input_path),
                     "output_file": str(output_path),
                     "processing_time_seconds": stats.get('processing_time', 0),
                     "points_per_second": stats.get('points_per_second', 0),
-                    "fast_mode": args.fast
+                    "fast_mode": args.fast,
+                    "batch_mode": use_batch
                 },
                 "statistics": {
                     "total_points": n_points,
-                    "classified_points": int((classification != 1).sum()),
-                    "unclassified_points": int((classification == 1).sum())
+                    "classified_points": classified_pts,
+                    "unclassified_points": unclassified_pts,
+                    "classified_percentage": stats.get('summary', {}).get('classified_percentage', 0)
                 },
-                "classification": stats.get('classification', {})
+                "classification": class_stats,
+                "pipeline_steps": stats.get('steps', {})
             }
 
             with open(report_path, 'w', encoding='utf-8') as f:
@@ -390,6 +475,54 @@ def main():
 
             if not args.quiet:
                 print(f"   ✅ IFC (BIM): {ifc_path} ({ifc_stats['n_classes']} klas)")
+
+        # Step 7: GeoJSON Export (opcjonalny)
+        if args.geojson:
+            from src.v2.exporters import GeoJSONExporter
+
+            geojson_path = Path(args.geojson)
+            geojson_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Wczytaj dane z zapisanego pliku
+            with laspy.open(str(output_path)) as src:
+                las_out = src.read()
+                coords_out = np.vstack([las_out.x, las_out.y, las_out.z]).T
+                class_out = np.array(las_out.classification)
+
+            exporter = GeoJSONExporter(
+                coords=coords_out,
+                classification=class_out
+            )
+
+            exporter.save(str(geojson_path))
+
+            if not args.quiet:
+                n_features = len(np.unique(class_out)) + 1  # klasy + bounding box
+                print(f"   ✅ GeoJSON: {geojson_path} ({n_features} features)")
+
+        # Step 8: HTML Viewer Export (opcjonalny)
+        if args.html:
+            from src.v2.exporters import HTMLViewerExporter
+
+            html_path = Path(args.html)
+            html_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Wczytaj dane z zapisanego pliku
+            with laspy.open(str(output_path)) as src:
+                las_out = src.read()
+                coords_out = np.vstack([las_out.x, las_out.y, las_out.z]).T
+                class_out = np.array(las_out.classification)
+
+            exporter = HTMLViewerExporter(
+                coords=coords_out,
+                classification=class_out,
+                title=f"CPK - {input_path.stem}"
+            )
+
+            exporter.save(str(html_path))
+
+            if not args.quiet:
+                print(f"   ✅ HTML Viewer: {html_path}")
 
         # Final summary
         elapsed = time.time() - start_time

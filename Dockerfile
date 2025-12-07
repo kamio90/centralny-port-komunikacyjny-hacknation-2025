@@ -1,13 +1,21 @@
 # CPK - Klasyfikator Chmur Punktow v2.0
 # Dockerfile dla HackNation 2025
 # Multi-platform: AMD64 + ARM64 (Mac M1/M2/M3/M4)
+#
+# Funkcjonalnosci:
+# - 36 klas infrastruktury (ASPRS, Railway, Road, BIM, CPK)
+# - Modul ML (Random Forest, PointNet, Ensemble, Active Learning)
+# - Modul Railway (Catenary, Track, Pole, Signal detection)
+# - Modul BIM (Building extraction, Clash detection, IFC export, LOD)
+# - Web UI (Streamlit) + CLI
 
 FROM python:3.11-slim
 
 # Metadane
 LABEL maintainer="HackNation 2025 - CPK Team"
-LABEL description="CPK Point Cloud Classifier - Automatyczna klasyfikacja infrastruktury"
+LABEL description="CPK Point Cloud Classifier - Automatyczna klasyfikacja infrastruktury z modulami ML, Railway i BIM"
 LABEL version="2.0"
+LABEL features="ML,Railway,BIM,36-classes,IFC-export"
 
 # Zmienne srodowiskowe
 ENV PYTHONUNBUFFERED=1 \
@@ -25,8 +33,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libgomp1 \
     curl \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 

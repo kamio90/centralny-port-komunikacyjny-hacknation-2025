@@ -15,6 +15,10 @@ from .components import (
     render_sidebar,
     render_header,
     render_footer,
+    render_analysis,
+    render_ml_classifier,
+    render_railway_analyzer,
+    render_bim_analyzer,
 )
 
 __all__ = [
@@ -26,4 +30,8 @@ __all__ = [
     'render_sidebar',
     'render_header',
     'render_footer',
+    'render_analysis',
+    'render_ml_classifier',
+    'render_railway_analyzer',
+    'render_bim_analyzer',
 ]

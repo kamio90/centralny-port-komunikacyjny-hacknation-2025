@@ -2,20 +2,50 @@
 
 **HackNation 2025 - Centralny Port Komunikacyjny**
 
-Automatyczna klasyfikacja elementów infrastruktury na podstawie chmur punktow LAS/LAZ.
+Automatyczna klasyfikacja elementow infrastruktury na podstawie chmur punktow LAS/LAZ z zaawansowanymi modulami ML, Railway i BIM.
 
 ![Python](https://img.shields.io/badge/python-3.9+-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Docker](https://img.shields.io/badge/docker-ready-blue.svg)
 
 ---
 
 ## Funkcjonalnosci
 
+### Core
 - **36 klas infrastruktury**: ASPRS, Railway, Road, BIM, CPK Custom
 - **Wysoka wydajnosc**: ~400k punktow/s w trybie szybkim
 - **Duze pliki**: Obsluga 10GB+ (tiling, memory-mapped I/O)
-- **Raporty**: TXT + JSON + opcjonalny IFC
+- **Raporty**: TXT + JSON + IFC
 - **Interfejs**: Web UI (Streamlit) + CLI
+
+### Modul ML (Machine Learning)
+- **Random Forest** - klasyfikator lesny z automatycznym strojeniem
+- **PointNet** - siec neuronowa dla chmur punktow (PyTorch)
+- **Ensemble** - laczenie wielu modeli (voting, stacking, boosting)
+- **Active Learning** - uczenie aktywne z selekcja probek
+- **Auto-tuning** - automatyczne dostrajanie hiperparametrow
+- **Post-processing** - wygladzanie, usuwanie szumu, laczenie klas
+- **Model Comparison** - porownywanie i benchmarking modeli
+
+### Modul Railway (Kolej)
+- **Catenary Detection** - detekcja sieci trakcyjnej
+- **Track Extraction** - ekstrakcja torow kolejowych
+- **Pole Detection** - wykrywanie slupow trakcyjnych
+- **Signal Detection** - detekcja sygnalow kolejowych
+- **Infrastructure Report** - raporty infrastruktury kolejowej
+
+### Modul BIM (Building Information Modeling)
+- **Building Extraction** - ekstrakcja budynkow z DBSCAN i RANSAC
+- **Geometry Analyzer** - analiza 3D (AABB, OBB, Convex Hull, PCA)
+- **LOD Classification** - klasyfikacja poziomu szczegolowosci (LOD 100-500)
+- **Clash Detection** - detekcja kolizji przestrzennych
+- **IFC Export** - eksport do formatu BIM (IFC-SPF, JSON, XML)
+
+### Analiza
+- **Terrain Analysis** - analiza terenu (spadki, ekspozycja)
+- **Volume Calculator** - obliczenia objetosci
+- **Railway Clearance** - skrajnia kolejowa
 
 ---
 
@@ -23,8 +53,9 @@ Automatyczna klasyfikacja elementów infrastruktury na podstawie chmur punktow L
 
 ### Wymagania
 
-- Python 3.9+
-- RAM: 8GB minimum (16GB+ zalecane)
+- Python 3.9+ (zalecany 3.11)
+- RAM: 8GB minimum (16GB+ zalecane dla duzych plikow)
+- GPU: opcjonalny (PyTorch z CUDA/MPS dla PointNet)
 
 ### Instalacja lokalna
 
@@ -60,45 +91,76 @@ python cli.py data/input.las output/classified.las --report output/raport.json
 
 # Tryb szybki
 python cli.py data/input.las output/classified.laz --fast
+
+# Z eksportem IFC
+python cli.py data/input.las output/classified.las --ifc output/model.ifc
 ```
 
 ---
 
 ## Docker
 
-### Build
+### Szybki start z Docker Compose
 
 ```bash
-docker build -t cpk-classifier .
+# Uruchom
+docker-compose up -d
+
+# Zatrzymaj
+docker-compose down
+
+# Rebuild (po zmianach)
+docker-compose build --no-cache && docker-compose up -d
 ```
 
-### Uruchom Web UI
+Aplikacja: http://localhost:8501
+
+### Reczny build i uruchomienie
 
 ```bash
+# Build
+docker build -t cpk-classifier .
+
+# Uruchom Web UI
 docker run -d -p 8501:8501 \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/output:/app/output \
   --name cpk \
   cpk-classifier
-```
 
-Otworz: http://localhost:8501
-
-### Uruchom CLI
-
-```bash
+# Uruchom CLI
 docker run --rm \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/output:/app/output \
   cpk-classifier \
   python cli.py /app/data/input.las /app/output/output.las --report /app/output/raport.json
-```
 
-### Zatrzymaj
-
-```bash
+# Zatrzymaj
 docker stop cpk && docker rm cpk
 ```
+
+### Logi
+
+```bash
+docker logs -f cpk
+# lub
+docker-compose logs -f
+```
+
+---
+
+## Interfejs Web (8 zakladek)
+
+| Zakladka | Opis |
+|----------|------|
+| **Wczytaj plik** | Upload plikow LAS/LAZ, tryb demo |
+| **Podglad** | Wizualizacja 3D chmury punktow |
+| **Hackathon** | Szybka klasyfikacja dla hackathonu |
+| **Analiza** | Analiza terenu, objetosci, statystyki |
+| **ML** | Klasyfikatory ML (RF, PointNet, Ensemble) |
+| **Railway** | Analiza infrastruktury kolejowej |
+| **BIM** | Analiza BIM, eksport IFC, kolizje |
+| **Klasyfikacja** | Pelna klasyfikacja 36 klas |
 
 ---
 
@@ -121,7 +183,7 @@ docker stop cpk && docker rm cpk
 |----|-------|
 | 17 | Obiekt naziemny |
 | 18 | Tory kolejowe |
-| 19 | Linie energetyczne |
+| 19 | Linie energetyczne (siec trakcyjna) |
 | 20 | Slupy trakcyjne |
 | 21 | Perony |
 | 22 | Podklady kolejowe |
@@ -166,32 +228,64 @@ docker stop cpk && docker rm cpk
 
 ```
 LAS/LAZ → LASLoader → TilingEngine → FeatureExtractor → Classifiers → LASWriter → LAS/LAZ + Raport
+                                           ↓
+                                    ML Pipeline (opcjonalnie)
+                                           ↓
+                                    Railway/BIM Analysis
+```
+
+### Moduly
+
+```
+cpk-clasificator/
+├── app.py                    # Web UI (Streamlit)
+├── cli.py                    # Command Line Interface
+├── src/
+│   ├── config.py             # Konfiguracja
+│   ├── ui/                   # Komponenty UI
+│   │   ├── styles.py
+│   │   └── components/
+│   │       ├── file_loader.py
+│   │       ├── preview.py
+│   │       ├── classification.py
+│   │       ├── hackathon_classification.py
+│   │       ├── analysis.py
+│   │       ├── ml_classifier.py
+│   │       ├── railway_analyzer.py
+│   │       └── bim_analyzer.py
+│   └── v2/
+│       ├── core/             # LASLoader, LASWriter, TilingEngine
+│       ├── features/         # GeometricFeatureExtractor
+│       ├── classifiers/      # 36 klasyfikatorow
+│       ├── algorithms/       # CSF, HAG, SOR, RANSAC
+│       ├── pipeline/         # ClassificationPipeline
+│       ├── analysis/         # Terrain, Volume, Clearance
+│       ├── exporters/        # GeoJSON, HTML Viewer
+│       ├── ml/               # Random Forest, PointNet, Ensemble
+│       ├── railway/          # Catenary, Track, Pole, Signal
+│       └── bim/              # Building, Clash, IFC, LOD, Geometry
+├── data/                     # Pliki wejsciowe
+├── output/                   # Wyniki
+├── Dockerfile
+├── docker-compose.yml
+├── requirements.txt
+└── requirements-docker.txt
 ```
 
 ### Algorytmy
 
-- **CSF** (Cloth Simulation Filter) - detekcja gruntu
-- **HAG** (Height Above Ground) - strefy wysokosci
-- **PCA** - cechy geometryczne (planarity, linearity, sphericity)
-- **NDVI** - wykrywanie roslinnosci z RGB
-- **RANSAC** - detekcja plaszczyzn
-
-### Struktura katalogow
-
-```
-cpk-clasificator/
-├── app.py              # Web UI (Streamlit)
-├── cli.py              # Command Line Interface
-├── src/v2/
-│   ├── core/           # LASLoader, LASWriter, TilingEngine
-│   ├── features/       # GeometricFeatureExtractor
-│   ├── classifiers/    # 36 klasyfikatorow
-│   └── pipeline/       # ClassificationPipeline
-├── data/               # Pliki wejsciowe
-├── output/             # Wyniki
-├── Dockerfile
-└── requirements.txt
-```
+| Algorytm | Zastosowanie |
+|----------|--------------|
+| **CSF** (Cloth Simulation Filter) | Detekcja gruntu |
+| **HAG** (Height Above Ground) | Strefy wysokosci |
+| **PCA** | Cechy geometryczne (planarity, linearity, sphericity) |
+| **NDVI** | Wykrywanie roslinnosci z RGB |
+| **RANSAC** | Detekcja plaszczyzn, dachow |
+| **DBSCAN** | Klasteryzacja budynkow |
+| **SOR** (Statistical Outlier Removal) | Usuwanie szumu |
+| **Random Forest** | Klasyfikacja ML |
+| **PointNet** | Klasyfikacja deep learning |
+| **Convex Hull** | Analiza geometrii 3D |
 
 ---
 
@@ -231,12 +325,87 @@ Plik z nadanymi klasami w polu `classification`.
   "classification": {
     "2": {"count": 20000000, "percentage": 41.67},
     "5": {"count": 10000000, "percentage": 20.83}
+  },
+  "ml_metrics": {
+    "model": "ensemble",
+    "accuracy": 0.94,
+    "f1_score": 0.92
+  },
+  "bim": {
+    "buildings_detected": 15,
+    "lod_level": "LOD300",
+    "clashes_found": 3
   }
 }
 ```
 
-### IFC (opcjonalnie)
-Podstawowe elementy BIM wyekstrahowane z klasyfikacji.
+### IFC (Industry Foundation Classes)
+Elementy BIM wyekstrahowane z klasyfikacji:
+- Budynki (IfcBuilding)
+- Teren (IfcSite)
+- Infrastruktura (IfcBuildingElementProxy)
+
+---
+
+## API Modulow
+
+### ML
+```python
+from src.v2.ml import RandomForestPointClassifier, PointNetTrainer, EnsembleClassifier
+
+# Random Forest
+rf = RandomForestPointClassifier()
+rf.fit(X_train, y_train)
+predictions = rf.predict(X_test)
+
+# PointNet (wymaga PyTorch)
+from src.v2.ml import PointNetConfig, is_torch_available
+if is_torch_available():
+    config = PointNetConfig(num_classes=10, num_points=1024)
+    trainer = PointNetTrainer(config)
+
+# Ensemble
+ensemble = EnsembleClassifier(method='voting')
+ensemble.add_model(rf)
+predictions = ensemble.predict(X_test)
+```
+
+### Railway
+```python
+from src.v2.railway import CatenaryDetector, TrackExtractor, InfrastructureReporter
+
+# Detekcja sieci trakcyjnej
+catenary = CatenaryDetector(coords, classifications)
+wires = catenary.detect()
+
+# Raport
+reporter = InfrastructureReporter(coords, classifications)
+html = reporter.generate_html()
+```
+
+### BIM
+```python
+from src.v2.bim import BuildingExtractor, ClashDetector, IFCExporter, LODClassifier
+
+# Ekstrakcja budynkow
+extractor = BuildingExtractor(coords)
+buildings = extractor.extract()
+
+# Detekcja kolizji
+detector = ClashDetector()
+detector.add_buildings(buildings)
+clashes = detector.detect()
+
+# Eksport IFC
+exporter = IFCExporter(project_name="CPK")
+exporter.add_buildings(buildings)
+exporter.export("model.ifc")
+
+# Klasyfikacja LOD
+lod = LODClassifier(coords)
+result = lod.classify()
+print(f"LOD Level: {result.level}")
+```
 
 ---
 
@@ -261,18 +430,43 @@ class MyClassifier(BaseClassifier):
 
 - [x] Automatyczna klasyfikacja (min. 5 klas) - **36 klas**
 - [x] LAS/LAZ input/output
-- [x] IFC output (bonus)
+- [x] IFC output (bonus) - **pelny eksport BIM**
 - [x] Raport jakosci (TXT + JSON)
 - [x] Web UI + CLI
 - [x] Skalowalnosc (tiling)
-- [x] Docker
+- [x] Docker + Docker Compose
 - [x] Instrukcja uruchomienia
+- [x] **Modul ML** (Random Forest, PointNet, Ensemble)
+- [x] **Modul Railway** (Catenary, Track, Pole, Signal)
+- [x] **Modul BIM** (Building, Clash, LOD, Geometry)
+
+---
+
+## Troubleshooting
+
+### Docker - problemy z pamiecia
+```bash
+# Zwieksz limit pamieci w Docker Desktop
+# Settings → Resources → Memory: 8GB+
+```
+
+### Open3D na ARM (Mac M1/M2/M3)
+```bash
+# Jesli problemy z instalacja:
+pip install open3d --no-cache-dir
+```
+
+### Streamlit - blad portu
+```bash
+# Zmien port
+streamlit run app.py --server.port 8502
+```
 
 ---
 
 ## Autorzy
 
-HackNation 2025 - Centralny Port Komunikacyjny
+HackNation 2025 - Centralny Port Komunikacyjny - Zespol Chmura+
 
 ## Licencja
 

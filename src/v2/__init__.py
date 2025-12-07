@@ -6,6 +6,9 @@ Moduły:
 - features: Ekstrakcja cech geometrycznych
 - classifiers: 45 klasyfikatorów infrastruktury
 - pipeline: Główny pipeline klasyfikacji
+- ml: Machine Learning (Random Forest, PointNet, Ensemble)
+- railway: Infrastruktura kolejowa (catenary, tracks, poles, signals)
+- analysis: Analiza (clearance, terrain, volume)
 
 Przykład użycia:
     from src.v2 import ClassificationPipeline

@@ -1,5 +1,6 @@
 """
 Komponent ładowania plików LAS/LAZ
+Z trybem DEMO dla szybkiego pokazu
 """
 
 import streamlit as st
@@ -7,9 +8,97 @@ from pathlib import Path
 import tempfile
 import glob
 from typing import Optional, Dict, Any
+import numpy as np
 
 from ...v2 import LASLoader
 from ...config import PATHS
+
+
+# Demo data cache
+_DEMO_CACHE = {}
+
+
+def _run_demo_mode():
+    """Uruchamia tryb DEMO z automatyczna klasyfikacja"""
+    import time
+
+    # Znajdź plik testowy
+    data_files = find_las_files()
+    if not data_files:
+        st.error("Brak plików w folderze data/ do DEMO")
+        return
+
+    demo_file = data_files[0]  # Użyj pierwszego dostępnego
+
+    # Progress
+    progress = st.progress(0)
+    status = st.empty()
+
+    try:
+        # 1. Wczytaj próbkę
+        status.info("🔄 Wczytywanie danych demo...")
+        progress.progress(10)
+
+        loader = LASLoader(str(demo_file))
+        data = loader.load(sample_size=100_000)  # 100k punktów
+
+        progress.progress(30)
+        status.info(f"✅ Wczytano {data['n_points']:,} punktów")
+
+        # 2. Klasyfikacja
+        status.info("🔄 Klasyfikacja w toku...")
+        progress.progress(40)
+
+        from ...v2.pipeline import ProfessionalPipeline, PipelineConfig
+
+        config = PipelineConfig(
+            detect_noise=True,
+            classify_ground=True,
+            classify_vegetation=True,
+            detect_buildings=True,
+            detect_infrastructure=True,
+            use_fast_noise_detection=True
+        )
+
+        pipeline = ProfessionalPipeline(
+            data['coords'],
+            data['colors'],
+            data['intensity'],
+            config
+        )
+
+        classification, stats = pipeline.run()
+
+        progress.progress(90)
+
+        # 3. Zapisz do session state
+        st.session_state['input_file'] = str(demo_file)
+        st.session_state['file_info'] = {
+            'n_points': data['n_points'],
+            'file_size_mb': demo_file.stat().st_size / (1024*1024),
+            'has_rgb': data['colors'] is not None,
+            'version': '1.2',
+            'bounds': data['bounds']
+        }
+
+        # Zapisz wyniki demo
+        st.session_state['demo_results'] = {
+            'coords': data['coords'],
+            'classification': classification,
+            'stats': stats,
+            'n_points': data['n_points']
+        }
+
+        progress.progress(100)
+        status.success(f"✅ DEMO gotowe! Wykryto {len(np.unique(classification))} klas")
+
+        # Auto-redirect info
+        time.sleep(1)
+
+    except Exception as e:
+        status.error(f"❌ Błąd DEMO: {e}")
+        import traceback
+        st.code(traceback.format_exc())
 
 
 def find_las_files() -> list:
@@ -25,23 +114,101 @@ def find_las_files() -> list:
 
 
 def render_file_loader() -> Optional[Dict[str, Any]]:
-    """File loader - 3 metody"""
-
-    st.subheader("📁 Wczytaj chmurę punktów")
+    """File loader - 4 metody z trybem DEMO"""
 
     # Znajdź pliki w data/
     available_files = find_las_files()
 
-    # 3 metody
+    # Welcome experience dla nowych użytkowników
+    if 'input_file' not in st.session_state:
+        # Quick start section
+        st.markdown("""
+        <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    padding: 25px 30px; border-radius: 12px; margin-bottom: 25px;
+                    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);'>
+            <h2 style='color: white; margin: 0 0 10px 0;'>Szybki start</h2>
+            <p style='color: #e0e0e0; margin: 0 0 15px 0; font-size: 15px;'>
+                Wyprobuj klasyfikacje na danych testowych lub wczytaj wlasny plik
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        col1, col2, col3 = st.columns([1, 1, 2])
+        with col1:
+            if st.button("DEMO", type="primary", use_container_width=True, help="100k punktow - ok. 10 sekund"):
+                _run_demo_mode()
+                st.rerun()
+            st.caption("Szybki pokaz")
+
+        with col2:
+            if available_files:
+                if st.button("Pierwszy plik", use_container_width=True, help=f"Uzyj {available_files[0].name}"):
+                    st.session_state['input_file'] = str(available_files[0])
+                    st.session_state['file_info'] = LASLoader.get_file_info(str(available_files[0]))
+                    st.rerun()
+                st.caption(f"{len(available_files)} plikow w data/")
+
+        # Workflow guide
+        st.markdown("---")
+        st.markdown("**Jak to dziala:**")
+
+        wf1, wf2, wf3, wf4 = st.columns(4)
+        with wf1:
+            st.markdown("""
+            <div style='text-align: center; padding: 15px; background: #f5f5f5; border-radius: 8px;'>
+                <div style='font-size: 32px; margin-bottom: 8px;'>1️⃣</div>
+                <div style='font-weight: 600;'>Wczytaj</div>
+                <div style='font-size: 12px; color: #666;'>LAS/LAZ plik</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with wf2:
+            st.markdown("""
+            <div style='text-align: center; padding: 15px; background: #f5f5f5; border-radius: 8px;'>
+                <div style='font-size: 32px; margin-bottom: 8px;'>2️⃣</div>
+                <div style='font-weight: 600;'>Podglad</div>
+                <div style='font-size: 12px; color: #666;'>Wizualizacja 3D</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with wf3:
+            st.markdown("""
+            <div style='text-align: center; padding: 15px; background: #f5f5f5; border-radius: 8px;'>
+                <div style='font-size: 32px; margin-bottom: 8px;'>3️⃣</div>
+                <div style='font-weight: 600;'>Klasyfikuj</div>
+                <div style='font-size: 12px; color: #666;'>Automatycznie</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with wf4:
+            st.markdown("""
+            <div style='text-align: center; padding: 15px; background: #f5f5f5; border-radius: 8px;'>
+                <div style='font-size: 32px; margin-bottom: 8px;'>4️⃣</div>
+                <div style='font-weight: 600;'>Eksportuj</div>
+                <div style='font-size: 12px; color: #666;'>LAS, IFC, GeoJSON</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("---")
+
+    st.subheader("Wczytaj chmure punktow")
+
+    # 4 metody
     method = st.radio(
         "Wybierz metodę:",
         [
             f"📂 Z folderu data/ ({len(available_files)} plików)",
             "📤 Upload pliku",
-            "✏️ Podaj ścieżkę"
+            "✏️ Podaj ścieżkę",
+            "🎮 Tryb DEMO"
         ],
         horizontal=True
     )
+
+    # === METODA 4: DEMO ===
+    if "DEMO" in method:
+        st.info("Tryb DEMO wczytuje 100k punktów z pliku testowego i klasyfikuje je automatycznie.")
+        if st.button("▶️ Uruchom DEMO", type="primary"):
+            _run_demo_mode()
+            st.rerun()
+        return None
 
     temp_path = None
 

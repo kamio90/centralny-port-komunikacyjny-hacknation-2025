@@ -1,8 +1,22 @@
 version: '3.8'
 
+# ============================================================================
+# CPK Chmura+ v2.0 - Docker Compose
+# HackNation 2025 - Centralny Port Komunikacyjny
+#
+# Funkcjonalnosci:
+# - 36 klas infrastruktury (ASPRS, Railway, Road, BIM, CPK)
+# - Modul ML (Random Forest, PointNet, Ensemble, Active Learning)
+# - Modul Railway (Catenary, Track, Pole, Signal detection)
+# - Modul BIM (Building extraction, Clash detection, IFC export, LOD)
+# - Web UI (8 zakladek) + CLI
+# ============================================================================
+
 services:
   cpk-classifier:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: cpk-classifier:latest
     container_name: cpk
     ports:
@@ -10,9 +24,11 @@ services:
     volumes:
       - ./data:/app/data
       - ./output:/app/output
+      - ./models:/app/models  # Dla zapisanych modeli ML
     environment:
       - STREAMLIT_SERVER_HEADLESS=true
       - STREAMLIT_SERVER_PORT=8501
+      - PYTHONUNBUFFERED=1
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
@@ -20,22 +36,47 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+    # Ograniczenia zasobow (opcjonalne)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 8G
+    #     reservations:
+    #       memory: 4G
 
 # ============================================================================
 # UZYCIE:
 #
-# Uruchom:
-#   docker-compose up -d
-#
-# Zatrzymaj:
-#   docker-compose down
-#
-# Logi:
-#   docker-compose logs -f
-#
-# Rebuild:
-#   docker-compose build --no-cache
-#   docker-compose up -d
-#
+# === SZYBKI START ===
+# docker-compose up -d
 # Aplikacja: http://localhost:8501
+#
+# === ZATRZYMAJ ===
+# docker-compose down
+#
+# === LOGI ===
+# docker-compose logs -f
+#
+# === REBUILD (po zmianach w kodzie) ===
+# docker-compose build --no-cache && docker-compose up -d
+#
+# === CLI (klasyfikacja z linii polecen) ===
+# docker-compose run --rm cpk-classifier python cli.py \
+#   /app/data/input.las /app/output/output.las \
+#   --report /app/output/raport.json
+#
+# === EXPORT IFC ===
+# docker-compose run --rm cpk-classifier python cli.py \
+#   /app/data/input.las /app/output/output.las \
+#   --ifc /app/output/model.ifc
+#
+# === ZAKLADKI WEB UI ===
+# 1. Wczytaj plik - upload LAS/LAZ
+# 2. Podglad - wizualizacja 3D
+# 3. Hackathon - szybka klasyfikacja
+# 4. Analiza - teren, objetosc
+# 5. ML - Random Forest, PointNet, Ensemble
+# 6. Railway - siec trakcyjna, tory, slupy
+# 7. BIM - budynki, kolizje, LOD, IFC
+# 8. Klasyfikacja - pelne 36 klas
 # ============================================================================

@@ -28,9 +28,12 @@ class LASLoader:
 
         logger.info(f"Inicjalizacja loadera dla: {self.file_path.name}")
 
-    def load(self) -> Dict[str, np.ndarray]:
+    def load(self, sample_size: Optional[int] = None) -> Dict[str, np.ndarray]:
         """
-        Wczytuje pełną chmurę punktów
+        Wczytuje chmurę punktów z opcjonalnym próbkowaniem
+
+        Args:
+            sample_size: Jeśli podane, losowo wybiera N punktów (dla szybszych testów)
 
         Returns:
             Dict zawierający:
@@ -50,6 +53,14 @@ class LASLoader:
         n_points = len(coords)
         logger.info(f"Wczytano {n_points:,} punktów")
 
+        # Próbkowanie (jeśli wymagane)
+        sample_idx = None
+        if sample_size and sample_size < n_points:
+            sample_idx = np.random.choice(n_points, sample_size, replace=False)
+            coords = coords[sample_idx]
+            n_points = sample_size
+            logger.info(f"Próbkowanie do {n_points:,} punktów")
+
         # Oblicz granice (bounds)
         bounds = {
             'x': (coords[:, 0].min(), coords[:, 0].max()),
@@ -66,19 +77,29 @@ class LASLoader:
                 las.green / 65535.0,
                 las.blue / 65535.0
             ]).T
+            if sample_idx is not None:
+                colors = colors[sample_idx]
             logger.info("Znaleziono kolory RGB")
 
         # Intensywność (jeśli dostępna)
         intensity = None
         if hasattr(las, 'intensity'):
             # Normalizuj do [0-1]
-            intensity = las.intensity / las.intensity.max()
+            max_intensity = las.intensity.max()
+            if max_intensity > 0:
+                intensity = las.intensity / max_intensity
+            else:
+                intensity = las.intensity.astype(np.float32)
+            if sample_idx is not None:
+                intensity = intensity[sample_idx]
             logger.info("Znaleziono intensywność")
 
         # Istniejąca klasyfikacja (jeśli dostępna)
         classification = None
         if hasattr(las, 'classification'):
-            classification = las.classification
+            classification = np.array(las.classification)
+            if sample_idx is not None:
+                classification = classification[sample_idx]
             unique_classes = np.unique(classification)
             logger.info(f"Znaleziono klasyfikację: {len(unique_classes)} klas")
 
@@ -128,6 +149,68 @@ class LASLoader:
 
         logger.info(f"Przefiltrowano: {mask.sum():,} / {len(coords):,} punktów")
         return filtered_data
+
+    def load_chunked(self, chunk_size: int = 10_000_000):
+        """
+        Generatorowa metoda do wczytywania dużych plików w kawałkach
+
+        Używaj dla plików > 50M punktów gdy pamięć jest ograniczona.
+
+        Args:
+            chunk_size: Liczba punktów na chunk (domyślnie 10M)
+
+        Yields:
+            Dict z danymi dla każdego chunka + informacją o indeksach
+        """
+        logger.info(f"Wczytywanie chunkami: {self.file_path.name}")
+
+        with laspy.open(self.file_path) as f:
+            total_points = f.header.point_count
+            logger.info(f"Łącznie {total_points:,} punktów, chunk_size={chunk_size:,}")
+
+            chunk_idx = 0
+            start_idx = 0
+
+            for las_chunk in f.chunk_iterator(chunk_size):
+                end_idx = start_idx + len(las_chunk.x)
+
+                # Współrzędne
+                coords = np.vstack([las_chunk.x, las_chunk.y, las_chunk.z]).T
+
+                # Kolory
+                colors = None
+                if hasattr(las_chunk, 'red'):
+                    colors = np.vstack([
+                        las_chunk.red / 65535.0,
+                        las_chunk.green / 65535.0,
+                        las_chunk.blue / 65535.0
+                    ]).T
+
+                # Intensywność
+                intensity = None
+                if hasattr(las_chunk, 'intensity'):
+                    max_int = las_chunk.intensity.max()
+                    if max_int > 0:
+                        intensity = las_chunk.intensity / max_int
+                    else:
+                        intensity = las_chunk.intensity.astype(np.float32)
+
+                yield {
+                    'coords': coords,
+                    'colors': colors,
+                    'intensity': intensity,
+                    'chunk_idx': chunk_idx,
+                    'start_idx': start_idx,
+                    'end_idx': end_idx,
+                    'n_points': len(coords),
+                    'total_points': total_points,
+                    'progress': end_idx / total_points * 100
+                }
+
+                start_idx = end_idx
+                chunk_idx += 1
+
+                logger.info(f"Chunk {chunk_idx}: {start_idx:,}/{total_points:,} ({start_idx/total_points*100:.1f}%)")
 
     @staticmethod
     def get_file_info(file_path: str) -> Dict:

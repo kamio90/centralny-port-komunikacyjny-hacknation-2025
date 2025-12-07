@@ -83,6 +83,19 @@ class InfrastructureParams:
     platform_max_z_variance: float = 0.03  # Very flat surface
     platform_min_density: float = 150    # Dense surface
 
+    # Water bodies (zbiorniki wodne) - very low, flat, low intensity (water absorbs LiDAR)
+    water_max_hag: float = 0.1           # Water is at ground level or below
+    water_max_z_variance: float = 0.01   # Water is VERY flat
+    water_max_intensity: float = 0.15    # Water absorbs LiDAR - low return
+    water_min_density: float = 50        # Some points from water surface
+
+    # Bridges (mosty) - elevated flat surfaces over gaps
+    bridge_min_hag: float = 2.0          # Bridges are elevated
+    bridge_max_hag: float = 30.0         # Can be high
+    bridge_max_z_variance: float = 0.05  # Flat deck surface
+    bridge_min_density: float = 100      # Solid surface
+    bridge_min_length: float = 10.0      # Minimum bridge length (meters)
+
 
 class InfrastructureDetectorFast:
     """
@@ -138,7 +151,9 @@ class InfrastructureDetectorFast:
             'curbs': self._detect_curbs(grid_features),
             'signs': self._detect_signs(grid_features),
             'barriers': self._detect_barriers(grid_features),
-            'platforms': self._detect_platforms(grid_features)
+            'platforms': self._detect_platforms(grid_features),
+            'water': self._detect_water(grid_features),
+            'bridges': self._detect_bridges(grid_features)
         }
 
         elapsed = time.time() - start_time
@@ -441,6 +456,84 @@ class InfrastructureDetectorFast:
         mask = hag_mask & flat_mask & dense_mask & exclude_mask & gray_mask
 
         logger.info(f"  Platforms: HAG {p.platform_min_hag}-{p.platform_max_hag}m, z_var<={p.platform_max_z_variance}")
+        return mask
+
+    def _detect_water(self, grid_features: Dict) -> np.ndarray:
+        """Detect water bodies: very flat, low intensity (water absorbs LiDAR)"""
+        p = self.params
+
+        # Water is at ground level or slightly below
+        hag_mask = self.hag <= p.water_max_hag
+
+        # Water is EXTREMELY flat
+        flat_mask = grid_features['z_variance'] <= p.water_max_z_variance
+
+        # Water absorbs LiDAR - very low intensity return
+        if self.intensity is not None:
+            # Water has LOW intensity (absorbs LiDAR)
+            low_intensity_mask = self.intensity <= p.water_max_intensity
+        else:
+            # Without intensity, water detection is less reliable
+            # Use color if available - water is often dark blue/green
+            low_intensity_mask = np.ones(self.n_points, dtype=bool)
+
+        # Some minimum density (scattered returns from water surface)
+        density_mask = grid_features['density'] >= p.water_min_density
+
+        # Exclude vegetation
+        exclude_mask = ~self.vegetation_mask
+
+        # Water color: dark blue, dark green, or dark (low brightness, blue-ish)
+        if self.colors is not None:
+            r, g, b = self.colors[:, 0], self.colors[:, 1], self.colors[:, 2]
+            brightness = self.colors.mean(axis=1)
+
+            # Water is dark and bluish
+            dark_mask = brightness < 0.4
+            blue_ish_mask = (b > r) | (g > r)  # More blue/green than red
+            color_mask = dark_mask & blue_ish_mask
+        else:
+            color_mask = np.ones(self.n_points, dtype=bool)
+
+        mask = hag_mask & flat_mask & low_intensity_mask & density_mask & exclude_mask & color_mask
+
+        logger.info(f"  Water: HAG<={p.water_max_hag}m, z_var<={p.water_max_z_variance}, intensity<={p.water_max_intensity}")
+        return mask
+
+    def _detect_bridges(self, grid_features: Dict) -> np.ndarray:
+        """Detect bridges: elevated flat surfaces spanning gaps"""
+        p = self.params
+
+        # Bridges are elevated
+        hag_mask = (self.hag >= p.bridge_min_hag) & (self.hag <= p.bridge_max_hag)
+
+        # Bridge deck is flat
+        flat_mask = grid_features['z_variance'] <= p.bridge_max_z_variance
+
+        # Solid surface
+        dense_mask = grid_features['density'] >= p.bridge_min_density
+
+        # Exclude vegetation
+        exclude_mask = ~self.vegetation_mask
+
+        # Bridge materials: concrete (gray) or steel (metallic gray)
+        if self.colors is not None:
+            brightness = self.colors.mean(axis=1)
+            saturation = self.colors.std(axis=1)
+            # Gray colors (low saturation, medium-high brightness)
+            gray_mask = (saturation < 0.12) & (brightness > 0.3) & (brightness < 0.8)
+        else:
+            gray_mask = np.ones(self.n_points, dtype=bool)
+
+        # Medium-high intensity (concrete/steel)
+        if self.intensity is not None:
+            intensity_mask = self.intensity >= 0.3
+        else:
+            intensity_mask = np.ones(self.n_points, dtype=bool)
+
+        mask = hag_mask & flat_mask & dense_mask & exclude_mask & gray_mask & intensity_mask
+
+        logger.info(f"  Bridges: HAG {p.bridge_min_hag}-{p.bridge_max_hag}m, z_var<={p.bridge_max_z_variance}")
         return mask
 
 
