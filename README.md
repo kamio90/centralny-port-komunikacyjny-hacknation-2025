@@ -147,6 +147,42 @@ docker logs -f cpk
 docker-compose logs -f
 ```
 
+### Testowanie z wlasnym plikiem LAS/LAZ
+
+**Sposob 1: Upload przez interfejs webowy (najlatwiejszy)**
+
+1. Uruchom aplikacje: `docker-compose up -d`
+2. Otworz http://localhost:8501
+3. Przejdz do zakladki **"Wczytaj plik"**
+4. Przeciagnij swoj plik LAS/LAZ lub kliknij "Browse files"
+
+**Sposob 2: Przez folder data/ (dla duzych plikow)**
+
+1. Skopiuj swoj plik do folderu `data/`:
+```bash
+cp /sciezka/do/twojego/pliku.las ./data/
+```
+
+2. Uruchom aplikacje:
+```bash
+docker-compose up -d
+```
+
+3. W aplikacji wybierz plik z listy dostepnych
+
+**Struktura folderow:**
+```
+cpk-clasificator/
+├── data/          ← tutaj wrzuc swoje pliki LAS/LAZ
+├── output/        ← tutaj pojawia sie wyniki
+├── models/        ← zapisane modele ML
+└── ...
+```
+
+**Tryb DEMO (bez wlasnego pliku)**
+
+Jesli nie masz pliku LAS/LAZ, uzyj **trybu demo** w zakladce "Wczytaj plik" - aplikacja wygeneruje syntetyczna chmure punktow do testowania.
+
 ---
 
 ## Interfejs Web (8 zakladek)
