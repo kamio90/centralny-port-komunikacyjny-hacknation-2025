@@ -188,6 +188,10 @@ class GridManager:
         """Pobiera wiele kwadratów po ID"""
         return [s for s in self.squares if s.square_id in square_ids]
 
+    def get_squares(self) -> List[GridSquare]:
+        """Pobiera wszystkie kwadraty"""
+        return self.squares
+
     def get_non_empty_squares(self) -> List[GridSquare]:
         """Pobiera tylko niepuste kwadraty"""
         return [s for s in self.squares if s.point_count > 0]

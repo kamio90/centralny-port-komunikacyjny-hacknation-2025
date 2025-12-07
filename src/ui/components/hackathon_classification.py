@@ -75,16 +75,18 @@ def render_hackathon_classification(n_threads: int = 1) -> None:
     # Mapa 2D
     fig = go.Figure()
     for sq in squares:
+        x_min, x_max = sq.bounds['x']
+        y_min, y_max = sq.bounds['y']
         fig.add_trace(go.Scatter(
-            x=[sq.bounds[0], sq.bounds[2], sq.bounds[2], sq.bounds[0], sq.bounds[0]],
-            y=[sq.bounds[1], sq.bounds[1], sq.bounds[3], sq.bounds[3], sq.bounds[1]],
+            x=[x_min, x_max, x_max, x_min, x_min],
+            y=[y_min, y_min, y_max, y_max, y_min],
             mode='lines+text',
-            text=[str(sq.id), '', '', '', ''],
+            text=[str(sq.square_id), '', '', '', ''],
             textposition='middle center',
             line=dict(color='blue', width=1),
             fill='toself',
             fillcolor='rgba(59, 130, 246, 0.2)',
-            name=f"Kwadrat {sq.id}"
+            name=f"Kwadrat {sq.square_id}"
         ))
 
     fig.update_layout(
@@ -95,8 +97,13 @@ def render_hackathon_classification(n_threads: int = 1) -> None:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # Wybór kwadratów
-    all_ids = [sq.id for sq in squares]
+    # Wybór kwadratów (tylko niepuste)
+    non_empty_squares = [sq for sq in squares if sq.point_count > 0]
+    if not non_empty_squares:
+        st.error("Wszystkie kwadraty są puste - brak punktów do klasyfikacji")
+        return
+
+    all_ids = [sq.square_id for sq in non_empty_squares]
     selected = st.multiselect("Wybierz kwadraty:", all_ids, default=all_ids[:min(3, len(all_ids))])
 
     if not selected:
@@ -137,11 +144,20 @@ def _run_hack_classification(grid, selected_ids: List[int]):
         progress.progress((i + 1) / (len(selected_ids) + 1))
 
         # Pobierz punkty
-        sq = grid.get_square(sq_id)
-        mask = sq.get_point_mask(data['coords'])
-        coords = data['coords'][mask]
-        colors = data['colors'][mask] if data['colors'] is not None else None
-        intensity = data['intensity'][mask] if data['intensity'] is not None else None
+        sq = grid.get_square_by_id(sq_id)
+        if sq is None:
+            status.warning(f"⚠️ Kwadrat {sq_id} nie istnieje, pomijam...")
+            continue
+
+        indices = grid.get_square_indices(sq)
+
+        if len(indices) == 0:
+            status.warning(f"⚠️ Kwadrat {sq_id} jest pusty, pomijam...")
+            continue
+
+        coords = data['coords'][indices]
+        colors = data['colors'][indices] if data['colors'] is not None else None
+        intensity = data['intensity'][indices] if data['intensity'] is not None else None
 
         # Klasyfikacja
         config = PipelineConfig(
