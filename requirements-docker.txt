@@ -1,0 +1,27 @@
+# Requirements for Docker (cross-platform, minimal)
+# Bez torch - nie jest używany w kodzie
+
+# Core dependencies
+numpy>=1.24.0,<2.0.0
+laspy[lazrs]>=2.5.0
+scipy>=1.11.0
+
+# Web UI
+streamlit>=1.31.0
+plotly>=5.18.0
+
+# ML & Processing
+scikit-learn>=1.3.0
+
+# Progress bars
+tqdm>=4.66.0
+
+# Utilities
+pyyaml>=6.0.0
+pandas>=2.1.0
+psutil>=5.9.0
+tabulate>=0.9.0
+
+# Open3D - opcjonalny (dla detekcji budynków)
+# Zakomentuj jeśli problemy z instalacją na ARM
+open3d>=0.18.0

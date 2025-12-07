@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  cpk-classifier:
+    build: .
+    image: cpk-classifier:latest
+    container_name: cpk
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+      - ./output:/app/output
+    environment:
+      - STREAMLIT_SERVER_HEADLESS=true
+      - STREAMLIT_SERVER_PORT=8501
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+# ============================================================================
+# UZYCIE:
+#
+# Uruchom:
+#   docker-compose up -d
+#
+# Zatrzymaj:
+#   docker-compose down
+#
+# Logi:
+#   docker-compose logs -f
+#
+# Rebuild:
+#   docker-compose build --no-cache
+#   docker-compose up -d
+#
+# Aplikacja: http://localhost:8501
+# ============================================================================

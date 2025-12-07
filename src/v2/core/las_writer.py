@@ -42,26 +42,38 @@ class LASWriter:
 
         logger.info(f"Zapisywanie {n_points:,} punktów do: {output_path.name}")
 
-        # Określ format punktów
-        if colors is not None:
-            point_format = 3  # XYZ + Intensity + RGB + Classification
-        else:
-            point_format = 1  # XYZ + Intensity + Classification
+        # Sprawdź czy mamy klasy > 31 (wymaga LAS 1.4)
+        max_class = int(classification.max())
+        use_las14 = max_class > 31
 
-        # Stwórz nowy LAS
-        if original_header is not None:
-            # Użyj oryginalnego headera jako bazy
-            header = original_header
-            # Zaktualizuj format jeśli potrzeba
-            if point_format != header.point_format.id:
-                header.point_format = laspy.PointFormat(point_format)
+        if use_las14:
+            logger.info(f"Klasy > 31 wykryte (max: {max_class}), używam LAS 1.4")
+            # LAS 1.4: point format 6 (bez RGB) lub 7 (z RGB)
+            if colors is not None:
+                point_format = 7
+            else:
+                point_format = 6
+            version = "1.4"
         else:
-            # Stwórz nowy header od zera
-            header = laspy.LasHeader(point_format=point_format, version="1.2")
+            # LAS 1.2: point format 3 (z RGB) lub 1 (bez RGB)
+            if colors is not None:
+                point_format = 3
+            else:
+                point_format = 1
+            version = "1.2"
+
+        # Stwórz nowy LAS header
+        header = laspy.LasHeader(point_format=point_format, version=version)
+
+        # Skopiuj scales i offsets z oryginalnego headera jeśli dostępny
+        if original_header is not None:
+            header.scales = original_header.scales
+            header.offsets = original_header.offsets
+        else:
             header.offsets = coords.min(axis=0)
             header.scales = [0.001, 0.001, 0.001]  # 1mm precision
 
-        # Stwórz LasData
+        # Stwórz LasData - point_count będzie automatycznie ustawiony
         las = laspy.LasData(header)
 
         # Ustaw współrzędne
@@ -69,21 +81,8 @@ class LASWriter:
         las.y = coords[:, 1]
         las.z = coords[:, 2]
 
-        # Ustaw klasyfikację - REMAP klas > 31 (LAS format limit)
-        # Standard LAS 1.2/1.3 ma tylko 5-bit classification (0-31)
-        classification_remapped = classification.copy()
-
-        # Klasy > 31 mapujemy do 19-31 (User Defined)
-        overflow_mask = classification_remapped > 31
-        if overflow_mask.any():
-            overflow_classes = np.unique(classification_remapped[overflow_mask])
-            logger.warning(f"UWAGA: Klasy > 31 wykryte: {overflow_classes}")
-            logger.warning(f"Remapowanie do zakresu 19-31 (User Defined)")
-
-            # Mapowanie: 32→19, 33→20, ..., 67→31 (z cyklicznym wraparound)
-            classification_remapped[overflow_mask] = 19 + ((classification_remapped[overflow_mask] - 32) % 13)
-
-        las.classification = classification_remapped.astype(np.uint8)
+        # Ustaw klasyfikację
+        las.classification = classification.astype(np.uint8)
 
         # Ustaw kolory (jeśli dostępne)
         if colors is not None:

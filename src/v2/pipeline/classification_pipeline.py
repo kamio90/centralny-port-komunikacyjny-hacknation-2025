@@ -19,7 +19,7 @@ import threading
 import time
 import logging
 
-from ..core import LASLoader, LASWriter, TilingEngine, Tile
+from ..core import LASLoader, LASWriter, TilingEngine, Tile, PerformanceEstimator, SpatialCropper
 from ..features import GeometricFeatureExtractor
 from ..classifiers import ClassifierRegistry, HeightZoneCalculator
 
@@ -91,6 +91,9 @@ class ClassificationPipeline:
         self.total_points = 0
         self.start_time = None
 
+        # DEMO metadata (wypełniane jeśli demo_mode=True)
+        self.demo_metadata = None
+
     def run(self, progress_callback: Optional[Callable] = None) -> Dict:
         """
         Uruchamia pełny pipeline klasyfikacji
@@ -119,15 +122,66 @@ class ClassificationPipeline:
         colors = data['colors']
         intensity = data['intensity']
         original_header = data['header']
-        n_points = len(coords)
+        n_points_total = len(coords)  # Całkowita liczba punktów (przed cropem)
 
-        logger.info(f"  Wczytano: {n_points:,} punktów")
+        logger.info(f"  Wczytano: {n_points_total:,} punktów")
+
+        # KROK 1.5: DEMO MODE - Wybór reprezentatywnego fragmentu
+        demo_indices = None  # Globalne indeksy wybranego obszaru (dla zapisu)
+
+        if self.demo_mode:
+            logger.info("=" * 70)
+            logger.info("TRYB DEMO: Wybór reprezentatywnego fragmentu")
+            logger.info("=" * 70)
+
+            # 1. Benchmark - zmierz wydajność
+            logger.info("  [DEMO] Benchmark wydajności...")
+            estimator = PerformanceEstimator(
+                coords=coords,
+                colors=colors,
+                intensity=intensity,
+                sample_size=50_000
+            )
+
+            # 2. Estymacja dla budżetu 10 minut
+            max_points, estimate_metadata = estimator.estimate_for_time_budget(600)
+
+            # 3. Spatial crop - wybierz fragment
+            logger.info("  [DEMO] Wybór reprezentatywnego obszaru...")
+            cropper = SpatialCropper(coords)
+            demo_indices, crop_metadata = cropper.select_area(
+                max_points=max_points,
+                strategy='center'  # Centrum chmury
+            )
+
+            # 4. Zapisz metadane DEMO
+            self.demo_metadata = {
+                **estimate_metadata,
+                **crop_metadata,
+                'total_cloud_points': n_points_total,
+                'demo_points': len(demo_indices),
+                'quality_mode': '1:1 (pełna)',
+                'sample_rate': 0.005,  # 0.5% = FULL
+                'search_radius': 1.0   # 1.0m = FULL
+            }
+
+            # 5. Przefiltruj dane do DEMO fragmentu
+            coords = coords[demo_indices]
+            colors = colors[demo_indices] if colors is not None else None
+            intensity = intensity[demo_indices] if intensity is not None else None
+
+            logger.info(f"  [DEMO] Wybrano obszar: {crop_metadata['area_side']:.1f}m × {crop_metadata['area_side']:.1f}m")
+            logger.info(f"  [DEMO] Liczba punktów: {len(demo_indices):,} / {n_points_total:,} ({crop_metadata['coverage_pct']:.2f}%)")
+            logger.info(f"  [DEMO] Estymowany czas: {estimate_metadata['estimated_time']:.1f}s")
+            logger.info("=" * 70)
+
+        n_points = len(coords)  # Aktywna liczba punktów (po cropie)
 
         # KROK 2: Podziel na kafelki
         logger.info("KROK 2/5: Tworzenie kafelków...")
         tiling_engine = TilingEngine(
             coords=coords,
-            target_points_per_tile=500_000 if not self.demo_mode else 10_000_000  # DEMO: ~28 tiles dla 277M
+            target_points_per_tile=500_000  # Zawsze standardowy rozmiar (DEMO ma już mały obszar)
         )
         tiles = tiling_engine.create_tiles()
 
@@ -180,6 +234,10 @@ class ClassificationPipeline:
             'points_per_second': n_points / processing_time,
             'classification_stats': classification_stats
         }
+
+        # Dodaj metadane DEMO jeśli tryb demo był włączony
+        if self.demo_metadata:
+            stats['demo_metadata'] = self.demo_metadata
 
         logger.info("=" * 70)
         logger.info("KLASYFIKACJA ZAKOŃCZONA!")
@@ -263,9 +321,11 @@ class ClassificationPipeline:
 
         n_tile_points = len(tile_coords)
 
-        # Ekstrakcja cech
-        sample_rate = 0.005 if not self.demo_mode else 0.0002  # Demo: 0.02% próbek (ULTRA FAST dla hackatonu!)
-        search_radius = 1.0 if not self.demo_mode else 0.5  # Demo: mniejszy radius = szybsze KD-tree
+        # Ekstrakcja cech - ZAWSZE pełna jakość 1:1!
+        # DEMO = mały obszar (max 2 kafelki), NIE niższa jakość!
+        sample_rate = 0.005  # 0.5% - standardowy sampling
+        search_radius = 1.0  # 1.0m - standardowy radius
+
         feature_extractor = GeometricFeatureExtractor(
             coords=tile_coords,
             sample_rate=sample_rate,
